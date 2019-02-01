@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Phil Dufault (2009)
 # bumped to v1 (2011)
 # phil@dufault.info
@@ -41,12 +41,12 @@ done
 
 
 # Set localhost if no host is set anywhere else
-if [[ ! $log ]]; then
+if [[ -z $log ]]; then
 	log="$PWD/mysqlfragfinder.log"
 fi
 
 # prevent overwriting the commandline args with the ones in .my.cnf, and check that .my.cnf exists
-if [[ ! $mysqlUser  && -f "$HOME/.my.cnf" ]]; then
+if [[ -z $mysqlUser  && -f "$HOME/.my.cnf" ]]; then
 	if grep "user=" "$HOME/.my.cnf" >/dev/null 2>&1; then
 		if grep "password=" "$HOME/.my.cnf" >/dev/null 2>&1; then
 			mysqlUser=$(grep "user=" "$HOME/.my.cnf" | awk -F= 'NR==1{print $NF}');
@@ -67,19 +67,19 @@ fi
 mysqlCmd="$mysqlCmd -u$mysqlUser -p$mysqlPass"
 
 # If set, add -h parameter to mysqlHost
-if [[ $mysqlHost ]]; then
+if [[ -n $mysqlHost ]]; then
 	mysqlCmd=$mysqlCmd" -h$mysqlHost"
 fi
 
 # Error out if no auth details are found for the user
-if [[ ! $mysqlUser ]]; then
+if [[ -z $mysqlUser ]]; then
 	echo "Authentication information not found as arguments, nor in $HOME/.my.cnf"
 	echo
 	showHelp
 	exit 1
 fi
 
-if [[ ! $mysqlPass ]]; then
+if [[ -z $mysqlPass ]]; then
 	echo -n "Enter your MySQL password: "
 	read -s mysqlPass
 fi
@@ -93,10 +93,10 @@ if [[ $? -gt 0 ]]; then
 fi
 
 # Retrieve the listing of databases:
-if [[ ! $mysqlDb ]]; then
-	databases=($($mysqlCmd --skip-column-names --batch -e "show databases;" 2>"$log"));
+if [[ -z $mysqlDb ]]; then
+	databases=$($mysqlCmd --skip-column-names --batch -e "show databases;" 2>"$log");
 else
-	databases=($mysqlDb);
+	databases=$mysqlDb;
 fi
 
 if [[ $? -gt 0 ]]; then
@@ -104,12 +104,13 @@ if [[ $? -gt 0 ]]; then
 	exit 1;
 fi
 
-echo -e "Found ${#databases[@]} databases";
+count=$(echo $databases | wc -w | tr -d '[:space:]')
+echo "Found ${count} databases";
 
-for i in ${databases[@]}; do
+for i in ${databases}; do
 	if [[ $i != 'information_schema' ]]; then
 		# Get a list of all of the tables, grep for MyISAM or InnoDB, and then sort out the fragmented tables with awk
-		fragmented=($($mysqlCmd --skip-column-names --batch -e "SHOW TABLE STATUS FROM \`$i\`;" 2>"$log" | awk '{print $1,$2,$10}' | egrep "MyISAM|InnoDB|Aria" | awk '$3 > 0' | awk '{print $1}'));
+		fragmented=$($mysqlCmd --skip-column-names --batch -e "SHOW TABLE STATUS FROM \`$i\`;" 2>"$log" | awk '{print $1,$2,$10}' | egrep "MyISAM|InnoDB|Aria" | awk '$3 > 0' | awk '{print $1}');
 	
 		if [[ $? -gt 0 ]]; then
 			echo "An error occured, check $log for more information."
@@ -121,24 +122,15 @@ for i in ${databases[@]}; do
 		echo ""
 		echo -n "Checking $i ... ";
 	
-		if [[ ${#fragmented[@]} -gt 0 ]]; then
-			if [[ ${#fragmented[@]} -gt 0 ]]; then
-				if [[ ${#fragmented[@]} -gt 1 ]]; then
-					echo "found ${#fragmented[@]} fragmented tables."
-				else
-					echo "found ${#fragmented[@]} fragmented table."
-				fi
-	
-				if [[ $mysqlDetail ]]; then
-					for table in ${fragmented[@]}; do
-						echo -ne "\t$table\n";
-					done
-				fi
-			fi
+		if [[ ! -z ${fragmented} ]]; then
+            echo "The following tables are fragmented:"
+            for table in ${fragmented}; do
+                echo -e "\t$table";
+            done
 	
 			# Only optimize tables if check option is disabled
-			if [[ ! $mysqlCheck ]]; then
-				for table in ${fragmented[@]}; do
+			if [[ -z $mysqlCheck ]]; then
+				for table in ${fragmented}; do
 					let fraggedTables=$fraggedTables+1;
 					echo -ne "\tOptimizing $table ... ";
 	
@@ -163,7 +155,7 @@ done
 echo ""
 
 # Footer message
-if [[ $mysqlCheck ]]; then
+if [[ -n $mysqlCheck ]]; then
 	echo "Check option was enabled, so no optimizing was done.";
 elif [[ ! $fraggedTables -gt 0 ]]; then
 	echo "No tables were fragmented, so no optimizing was done.";
@@ -178,3 +170,4 @@ if [[ ! -s $log ]]; then
 fi
 
 unset fraggedTables
+
